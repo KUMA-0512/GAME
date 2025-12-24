@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>游戏材料大师 v12 - 联网协作版</title>
+    <title>游戏材料大师 v12.1 - 修复版</title>
     <style>
         :root { 
             --bg: #f8fafc; --surface: #ffffff; --primary: #3b82f6; 
@@ -11,7 +11,6 @@
             --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
         }
         
-        /* 品质颜色 */
         .q-white  { --c: #64748b; --b: #f1f5f9; }
         .q-green  { --c: #16a34a; --b: #dcfce7; }
         .q-blue   { --c: #2563eb; --b: #dbeafe; }
@@ -31,7 +30,7 @@
         .btn { border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: 0.2s; }
         .btn:hover { opacity: 0.9; }
         .btn-primary { background: var(--primary); color: white; width: 100%; }
-        .btn-ghost { background: #f1f5f9; color: var(--text-sub); }
+        .btn-ghost { background: #f1f5f9; color: var(--text-sub); border: 1px solid var(--border); }
         .btn-danger { background: #fee2e2; color: var(--danger); }
         .btn-success { background: var(--success); color: white; }
         
@@ -70,17 +69,29 @@
 <div id="toast-container"></div>
 <div id="modal" onclick="if(event.target==this)this.style.display='none'"><div class="modal-content" id="modalBody"></div></div>
 
+<input type="file" id="fileIn" style="display:none" onchange="handleImport(this)">
+
 <div class="app-container">
     
     <aside id="adminPanel">
         <div class="card" style="border-color: var(--primary); background: #eff6ff;">
             <div class="card-header">
-                <h2 style="color:var(--primary)">👑 管理员模式</h2>
+                <h2 style="color:var(--primary)">👑 管理员控制台</h2>
             </div>
             <p style="font-size:12px; color:var(--text-sub); margin-bottom:10px">
-                在此处修改的数据仅在内存中生效。<br>修改完成后，请务必点击下方按钮导出 JSON 并上传到服务器。
+                提示：本地修改需导出为 JSON 并上传到 GitHub 才能对所有用户生效。
             </p>
-            <button class="btn btn-primary" onclick="exportJSON()">📤 导出 data.json (发布更新)</button>
+            <button class="btn btn-primary" onclick="exportJSON()">📤 导出 data.json (发布)</button>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>📂 批量数据管理</h2></div>
+            <div style="display:flex; flex-direction:column; gap:10px">
+                <button class="btn btn-ghost" onclick="triggerImport('recipe')">📥 导入配方 CSV</button>
+                <button class="btn btn-ghost" onclick="triggerImport('task')">📥 导入任务 CSV</button>
+                <button class="btn btn-ghost" onclick="exportCSV('recipe')">📤 导出配方 CSV</button>
+                <button class="btn btn-ghost" onclick="exportCSV('task')">📤 导出任务 CSV</button>
+            </div>
         </div>
 
         <div class="card">
@@ -108,6 +119,7 @@
     </aside>
 
     <main style="grid-column: span 1; width: 100%;"> 
+        
         <div class="card">
             <div class="card-header">
                 <h2>📊 缺口补给清单</h2>
@@ -150,13 +162,11 @@
 </div>
 
 <script>
-    // --- 状态管理 ---
     let state = {
-        recipes: [], // 来自 data.json
-        tasks: [],   // 来自 data.json
-        inventory: JSON.parse(localStorage.getItem('user_inv')) || {}, // 本地私有
-        doneIds: JSON.parse(localStorage.getItem('user_done')) || [],  // 本地私有
-        
+        recipes: [], // data.json
+        tasks: [],   // data.json
+        inventory: JSON.parse(localStorage.getItem('user_inv')) || {},
+        doneIds: JSON.parse(localStorage.getItem('user_done')) || [],
         selectedIds: [],
         recipeMap: new Map(),
         activeCat: '全部',
@@ -164,9 +174,9 @@
         isAdmin: false
     };
 
-    // --- 启动逻辑 ---
+    let importType = 'recipe'; // 记录当前正在导入的类型
+
     async function init() {
-        // 1. 检查管理员权限
         const params = new URLSearchParams(window.location.search);
         if (params.get('admin') === 'true') {
             state.isAdmin = true;
@@ -174,27 +184,27 @@
             document.querySelector('.app-container').style.gridTemplateColumns = '360px 1fr';
             showToast('管理员模式已开启', 'warning');
         } else {
-            document.querySelector('.app-container').style.display = 'block'; // 普通用户单栏显示
+            document.querySelector('.app-container').style.display = 'block';
         }
 
-        // 2. 联网获取公共数据
         const statusEl = document.getElementById('syncStatus');
         try {
-            // 加时间戳防止缓存
             const res = await fetch(`./data.json?v=${Date.now()}`);
-            if (!res.ok) throw new Error("无法加载配置");
+            if (!res.ok) throw new Error("Load failed");
             const data = await res.json();
-            
             state.recipes = data.recipes || [];
             state.tasks = data.tasks || [];
-            
             buildIndex();
             renderAll();
             statusEl.textContent = "✅ 已同步最新数据";
             statusEl.style.color = "var(--success)";
         } catch (e) {
             console.error(e);
-            statusEl.textContent = "⚠️ 数据加载失败 (请检查 data.json)";
+            if(state.isAdmin) {
+                statusEl.textContent = "⚠️ 无法读取 data.json (请使用左侧面板导入数据)";
+            } else {
+                statusEl.textContent = "⚠️ 数据加载失败";
+            }
             statusEl.style.color = "var(--danger)";
         }
     }
@@ -204,35 +214,78 @@
         state.recipes.forEach(r => state.recipeMap.set(r.name, r));
     }
 
-    // --- 数据保存逻辑 ---
     function syncUser() {
-        // 只保存用户私有数据
         localStorage.setItem('user_inv', JSON.stringify(state.inventory));
         localStorage.setItem('user_done', JSON.stringify(state.doneIds));
     }
 
-    // --- 核心：管理员导出 JSON ---
-    function exportJSON() {
-        const data = {
-            recipes: state.recipes,
-            tasks: state.tasks
-        };
-        const str = JSON.stringify(data, null, 2);
-        const blob = new Blob([str], {type: "application/json"});
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "data.json";
-        link.click();
-        showToast('data.json 已生成，请上传到服务器');
+    // --- 导入导出逻辑 (管理员) ---
+    function triggerImport(type) { 
+        importType = type; 
+        document.getElementById('fileIn').click(); 
     }
 
-    // --- 计算引擎 ---
+    function handleImport(input) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const lines = e.target.result.split('\n').filter(l=>l.trim());
+            let count = 0;
+            lines.slice(1).forEach(l => {
+                const c = l.replace('\ufeff','').split(',');
+                if(c.length < 2) return;
+                
+                if(importType === 'recipe') {
+                    // 导入配方
+                    const comps = [];
+                    if(c[3]) c[3].split(';').forEach(s => { const[n,q]=s.split(':'); if(n&&q) comps.push({item:n.trim(), quantity:parseInt(q)})});
+                    const newItem = {name:c[0].trim(), grade:c[1].trim(), source:c[2].trim(), components:comps};
+                    // 覆盖旧配方
+                    state.recipes = state.recipes.filter(r=>r.name!==newItem.name); 
+                    state.recipes.push(newItem);
+                } else {
+                    // 导入任务
+                    const needs = {};
+                    if(c[2]) c[2].split(';').forEach(s => { const[n,q]=s.split(':'); if(n&&q) needs[n.trim()]=parseInt(q)});
+                    state.tasks.push({id:Date.now()+Math.random(), category:c[0].trim(), title:c[1].trim(), needs});
+                }
+                count++;
+            });
+            buildIndex();
+            renderAll();
+            showToast(`成功导入 ${count} 条数据`);
+            // 清空input，防止同名文件不触发onchange
+            input.value = '';
+        };
+        reader.readAsText(input.files[0], "UTF-8");
+    }
+
+    function exportCSV(type) {
+        let csv = type==='recipe' ? "\ufeff名称,等级,来源,配方\n" : "\ufeff分类,任务名,需求\n";
+        if(type==='recipe') state.recipes.forEach(r => csv += `${r.name},${r.grade},${r.source},${r.components.map(c=>`${c.item}:${c.quantity}`).join(';')}\n`);
+        else state.tasks.forEach(t => csv += `${t.category},${t.title},${Object.entries(t.needs).map(([k,v])=>`${k}:${v}`).join(';')}\n`);
+        const blob = new Blob([csv], {type:'text/csv'});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${type}_export.csv`;
+        a.click();
+    }
+
+    function exportJSON() {
+        const data = { recipes: state.recipes, tasks: state.tasks };
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "data.json";
+        a.click();
+        showToast('data.json 已导出，请上传到 GitHub');
+    }
+
+    // --- 计算与渲染 (保持 V11 逻辑) ---
     function solve(itemName, amount, tempInv, directNeeds) {
         let results = {};
         let fromStock = Math.min(amount, tempInv[itemName] || 0);
         amount -= fromStock;
         tempInv[itemName] = (tempInv[itemName] || 0) - fromStock;
-
         if (amount > 0) {
             directNeeds[itemName] = (directNeeds[itemName] || 0) + amount;
             const r = state.recipeMap.get(itemName);
@@ -247,13 +300,11 @@
     }
 
     function calculate() {
-        // 同步勾选内存
         document.querySelectorAll('.t-cb').forEach(cb => {
             const id = parseFloat(cb.dataset.id);
             if(cb.checked && !state.selectedIds.includes(id)) state.selectedIds.push(id);
             else if(!cb.checked) state.selectedIds = state.selectedIds.filter(i => i !== id);
         });
-
         let total = {}, direct = {}, vInv = JSON.parse(JSON.stringify(state.inventory));
         state.selectedIds.forEach(id => {
             const t = state.tasks.find(x => x.id === id);
@@ -266,21 +317,14 @@
         renderSummary(total, direct);
     }
 
-    // --- 渲染逻辑 ---
     function renderSummary(total, direct) {
         const el = document.getElementById('summaryDisplay');
         if (!Object.keys(total).length) return el.innerHTML = `<p style="color:var(--text-sub); text-align:center; padding:10px;">暂无缺口</p>`;
-        
         el.innerHTML = Object.entries(total).map(([k, amt]) => {
             const lvl = amt > 50 ? 4 : amt > 20 ? 3 : amt > 5 ? 2 : 1;
             const r = state.recipeMap.get(k);
-            return `
-            <div class="lack-card lvl-${lvl}">
-                <div>
-                    <span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span> 
-                    <b>x${amt}</b>
-                    ${direct[k] ? `<small style="color:#999">(直需:${direct[k]})</small>` : ''}
-                </div>
+            return `<div class="lack-card lvl-${lvl}">
+                <div><span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span> <b>x${amt}</b> ${direct[k] ? `<small style="color:#999">(直需:${direct[k]})</small>` : ''}</div>
                 <button class="btn btn-ghost" style="padding:4px 8px; font-size:12px" onclick="quickAdd('${k}')">填入</button>
             </div>`;
         }).join('');
@@ -288,19 +332,14 @@
 
     function renderTasks() {
         const cats = ['全部', ...new Set(state.tasks.map(t => t.category || '未分类'))];
-        document.getElementById('categoryTabs').innerHTML = cats.map(c => 
-            `<div class="tab-btn ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c}';renderTasks()">${c}</div>`
-        ).join('');
-
+        document.getElementById('categoryTabs').innerHTML = cats.map(c => `<div class="tab-btn ${state.activeCat===c?'active':''}" onclick="state.activeCat='${c}';renderTasks()">${c}</div>`).join('');
         const visible = state.tasks.filter(t => state.activeCat==='全部' || (t.category||'未分类')===state.activeCat);
         const pending = visible.filter(t => !state.doneIds.includes(t.id));
         const done = state.tasks.filter(t => state.doneIds.includes(t.id));
-
         const getRow = (t, isDone) => {
             const needsHtml = Object.entries(t.needs).map(([n, q]) => `<span class="badge q-${state.recipeMap.get(n)?.grade||'white'}" style="font-size:10px">${n}x${q}</span>`).join(' ');
             const checked = state.selectedIds.includes(t.id) ? 'checked' : '';
-            return `
-            <div class="task-item ${isDone?'done':''}">
+            return `<div class="task-item ${isDone?'done':''}">
                 <div>${isDone ? '✅' : `<input type="checkbox" class="t-cb" data-id="${t.id}" ${checked} onchange="calculate()">`}</div>
                 <div onclick="${!isDone ? `toggleDone(${t.id})` : ''}" style="cursor:pointer">
                     <div style="font-weight:600">${t.title}</div>
@@ -309,34 +348,29 @@
                 ${state.isAdmin ? `<button class="btn btn-danger" style="padding:4px" onclick="deleteTask(${t.id})">删</button>` : ''}
             </div>`;
         };
-
         document.getElementById('taskListBody').innerHTML = pending.length ? pending.map(t => getRow(t, false)).join('') : `<div style="text-align:center;color:#ccc;padding:10px">无待办任务</div>`;
         document.getElementById('doneArea').innerHTML = done.map(t => getRow(t, true)).join('');
         document.getElementById('doneCount').innerText = done.length;
+        // 全选状态
+        const pendingIds = pending.map(t => t.id);
+        const allSelected = pendingIds.length > 0 && pendingIds.every(id => state.selectedIds.includes(id));
+        document.getElementById('selectAllBtn').checked = allSelected;
     }
 
     function renderInventory() {
         const grades = ['all', 'white', 'green', 'blue', 'purple', 'gold'];
         document.getElementById('invFilters').innerHTML = grades.map(g => `<div class="tab-btn ${state.filterGrade===g?'active':''}" onclick="state.filterGrade='${g}';renderInventory()">${g=='all'?'全部':g}</div>`).join('');
-        
         const items = Array.from(new Set([...state.recipeMap.keys(), ...Object.keys(state.inventory)])).sort();
         document.getElementById('inventoryDisplay').innerHTML = items.map(k => {
             const r = state.recipeMap.get(k);
             if(state.filterGrade !== 'all' && (r?.grade || 'white') !== state.filterGrade) return '';
-            return `
-            <div class="inv-card">
-                <span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span>
-                <div class="inv-actions">
-                    <input class="inv-input" type="number" value="${state.inventory[k]||0}" onchange="modifyInv('${k}', this.value)">
-                </div>
-            </div>`;
+            return `<div class="inv-card"><span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span>
+                <div class="inv-actions"><input class="inv-input" type="number" value="${state.inventory[k]||0}" onchange="modifyInv('${k}', this.value)"></div></div>`;
         }).join('');
     }
 
-    // --- 操作 ---
     function modifyInv(k, v) { state.inventory[k] = Math.max(0, parseInt(v)); syncUser(); calculate(); }
     function quickAdd(k) { state.inventory[k] = (state.inventory[k]||0)+1; syncUser(); renderInventory(); calculate(); showToast(`${k}+1`); }
-    
     function toggleSelectAll(btn) {
         const visible = state.tasks.filter(t => (state.activeCat==='全部' || (t.category||'未分类')===state.activeCat) && !state.doneIds.includes(t.id));
         const ids = visible.map(t => t.id);
@@ -344,7 +378,6 @@
         else state.selectedIds = state.selectedIds.filter(id => !ids.includes(id));
         renderTasks(); calculate();
     }
-
     function batchCompleteTasks() {
         if(!state.selectedIds.length) return showToast('未勾选任务', 'warning');
         if(confirm(`完成 ${state.selectedIds.length} 个任务并扣除库存？`)) {
@@ -358,7 +391,6 @@
             state.selectedIds=[]; syncUser(); renderAll(); showToast('批量完成成功');
         }
     }
-
     function toggleDone(id) {
         const t = state.tasks.find(x=>x.id===id);
         if(confirm('完成任务并扣料？')) {
@@ -367,56 +399,30 @@
             syncUser(); renderAll();
         }
     }
-
-    // --- 管理员操作 ---
     function saveRecipe() {
         if(!state.isAdmin) return;
         const name = document.getElementById('itemName').value.trim();
-        if(!name) return;
-        const comps = Array.from(document.querySelectorAll('#recipeArea div')).map(r => ({
-            item: r.querySelector('.i-n').value, quantity: parseInt(r.querySelector('.i-q').value)
-        })).filter(c=>c.item&&c.quantity);
+        if(!name) return showToast('无名称', 'warning');
+        const comps = Array.from(document.querySelectorAll('#recipeArea div')).map(r => ({item: r.querySelector('.i-n').value, quantity: parseInt(r.querySelector('.i-q').value)})).filter(c=>c.item&&c.quantity);
         state.recipes = state.recipes.filter(r=>r.name!==name);
         state.recipes.push({name, grade:document.getElementById('itemGrade').value, source:document.getElementById('itemSource').value, components:comps});
-        buildIndex(); renderAll(); showToast('配方已录入 (请记得导出)');
+        buildIndex(); renderAll(); showToast('配方已录入');
     }
-
     function saveTask() {
         if(!state.isAdmin) return;
         const title = document.getElementById('taskTitle').value.trim();
-        if(!title) return;
-        const needs={}; document.querySelectorAll('#taskReqArea div').forEach(r=>{
-            let n=r.querySelector('.i-n').value, q=parseInt(r.querySelector('.i-q').value); if(n&&q) needs[n]=q;
-        });
+        if(!title) return showToast('无标题', 'warning');
+        const needs={}; document.querySelectorAll('#taskReqArea div').forEach(r=>{let n=r.querySelector('.i-n').value, q=parseInt(r.querySelector('.i-q').value); if(n&&q) needs[n]=q;});
         state.tasks.push({id:Date.now(), category:document.getElementById('taskCategory').value||'未分类', title, needs});
-        renderAll(); showToast('任务已录入 (请记得导出)');
+        renderAll(); showToast('任务已录入');
     }
-    
-    function deleteTask(id) {
-        if(!state.isAdmin) return;
-        if(confirm('删除此任务？')) { state.tasks=state.tasks.filter(t=>t.id!==id); renderAll(); }
-    }
-
+    function deleteTask(id) { if(!state.isAdmin) return; if(confirm('删除此任务？')) { state.tasks=state.tasks.filter(t=>t.id!==id); renderAll(); } }
     function addRow(id) {
         const d = document.createElement('div'); d.style.cssText="display:flex;gap:5px;margin-bottom:5px";
         d.innerHTML=`<input class="i-n" placeholder="名"><input class="i-q" type="number" placeholder="量" style="width:50px"><button class="btn btn-danger" onclick="this.parentElement.remove()">×</button>`;
         document.getElementById(id).appendChild(d);
     }
-
-    // --- 辅助 ---
-    function showToast(msg, type='success') {
-        const d = document.createElement('div'); d.className='toast'; d.textContent=msg; d.style.borderLeft=`4px solid var(--${type})`;
-        document.getElementById('toast-container').appendChild(d); setTimeout(()=>d.remove(), 3000);
-    }
+    function showToast(msg, type='success') { const d=document.createElement('div');d.className='toast';d.textContent=msg;d.style.borderLeft=`4px solid var(--${type})`;document.getElementById('toast-container').appendChild(d);setTimeout(()=>d.remove(),3000);}
     function showDetail(k) {
         const r = state.recipeMap.get(k);
-        document.getElementById('modalBody').innerHTML=`<h3 class="q-${r?.grade||'white'}" style="text-align:center">${k}</h3><p style="text-align:center">${r?.source||'来源未知'}</p><hr><p>${r?.components?.map(c=>`${c.item}x${c.quantity}`).join(', ')||'基础材料'}</p>`;
-        document.getElementById('modal').style.display='flex';
-    }
-    function clearUserData() { if(confirm('清空我的库存和进度？')) { localStorage.clear(); location.reload(); } }
-    function renderAll() { renderTasks(); renderInventory(); calculate(); }
-
-    init();
-</script>
-</body>
-</html>
+        document.getElementById('modalBody').innerHTML=`<h3 class="q-${r?.grade||'white'}" style="text-align:center">${k}</h3><p style="text-align:center">${r?.source||'来源未知'
