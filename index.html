@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>游戏材料大师 v12.2 - 稳健版</title>
+    <title>游戏材料大师 v13 - 仪表盘布局</title>
     <style>
         :root { 
             --bg: #f1f5f9; --surface: #ffffff; --primary: #3b82f6; 
@@ -18,16 +18,32 @@
         .q-gold   { --c: #d97706; --b: #fef3c7; }
         .q-rainbow{ --c: #db2777; --b: #fce7f3; background-image: linear-gradient(45deg, #fce7f3, #e0f2fe); }
 
-        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text-main); font-size: 14px; }
-        .app-container { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text-main); font-size: 13px; }
+        
+        /* --- 核心布局修改：三栏 Grid --- */
+        .app-container { 
+            max-width: 1600px; 
+            margin: 0 auto; 
+            display: grid; 
+            /* 左(库存)300px | 中(任务)自动撑满 | 右(控制台)340px */
+            grid-template-columns: 300px 1fr 340px; 
+            gap: 20px; 
+            align-items: start; 
+        }
+
+        /* 响应式：屏幕变窄时，变成两栏或一栏 */
+        @media (max-width: 1200px) { .app-container { grid-template-columns: 300px 1fr; } }
         @media (max-width: 900px) { .app-container { grid-template-columns: 1fr; } }
 
-        .card { background: var(--surface); border-radius: 10px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--border); margin-bottom: 16px; }
+        /* 布局容器辅助类 */
+        .layout-col { display: flex; flex-direction: column; gap: 16px; }
+
+        .card { background: var(--surface); border-radius: 10px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); border: 1px solid var(--border); }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
         h2 { margin: 0; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
 
         input, select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px; box-sizing: border-box; margin-bottom: 8px; font-size: 13px; }
-        .btn { border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 13px; transition: 0.2s; }
+        .btn { border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; font-size: 12px; transition: 0.2s; }
         .btn:hover { opacity: 0.9; }
         .btn-primary { background: var(--primary); color: white; width: 100%; }
         .btn-ghost { background: #f8fafc; color: var(--text-sub); border: 1px solid var(--border); }
@@ -40,9 +56,9 @@
         .task-item:hover { background: #f8fafc; border-color: var(--primary); }
         .task-item.done { opacity: 0.5; background: #f1f5f9; }
         
-        .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
-        .inv-card { background: var(--surface); border: 1px solid var(--border); padding: 8px; border-radius: 6px; text-align: center; }
-        .inv-input { width: 50px; text-align: center; margin: 0; padding: 2px; }
+        .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; }
+        .inv-card { background: var(--surface); border: 1px solid var(--border); padding: 5px; border-radius: 6px; text-align: center; }
+        .inv-input { width: 100%; text-align: center; margin: 5px 0 0 0; padding: 2px; border:none; background:#f1f5f9; border-radius:4px; font-weight:bold; color:var(--primary)}
 
         .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
         .tab-btn { padding: 4px 10px; border-radius: 4px; font-size: 12px; border: 1px solid var(--border); cursor: pointer; background: white; }
@@ -59,9 +75,12 @@
         #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:999; justify-content:center; align-items:center; }
         .modal-content { background: white; width: 400px; padding: 24px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
 
-        /* --- 管理员面板默认隐藏 --- */
+        /* 管理员面板默认隐藏，在JS中控制 */
         #adminPanel { display: none; }
         .btn-group-v { display: flex; flex-direction: column; gap: 8px; }
+        
+        /* 针对左侧库存栏的特殊优化：让它不要太长，可以内部滚动 */
+        #col-inventory .card { max-height: 90vh; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -73,62 +92,18 @@
 
 <div class="app-container">
     
-    <aside id="adminPanel">
-        <div class="card" style="border-color: var(--primary); background: #eff6ff;">
-            <div class="card-header">
-                <h2 style="color:var(--primary)">👑 管理员控制台</h2>
-            </div>
-            <p style="font-size:12px; color:var(--text-sub); margin-bottom:10px">
-                修改仅在内存生效，必须导出 JSON 并上传到 GitHub。
-            </p>
-            <button class="btn btn-primary" onclick="exportJSON()">📤 导出 data.json (发布)</button>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><h2>📂 数据管理</h2></div>
-            <div class="btn-group-v">
-                <button class="btn btn-ghost" onclick="triggerImport('recipe')">📥 导入配方 (CSV)</button>
-                <button class="btn btn-ghost" onclick="triggerImport('task')">📥 导入任务 (CSV)</button>
-                <div style="border-top:1px solid #eee; margin:5px 0"></div>
-                <button class="btn btn-danger" style="font-size:12px" onclick="clearData('recipe')">🗑️ 清空现有配方</button>
-                <button class="btn btn-danger" style="font-size:12px" onclick="clearData('task')">🗑️ 清空现有任务</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><h2>🛠️ 录入配方</h2></div>
-            <input type="text" id="itemName" placeholder="道具名称">
-            <select id="itemGrade">
-                <option value="white">白色</option><option value="green">绿色</option>
-                <option value="blue">蓝色</option><option value="purple">紫色</option>
-                <option value="gold">金色</option><option value="rainbow">彩色</option>
-            </select>
-            <input type="text" id="itemSource" placeholder="来源">
-            <div id="recipeArea"></div>
-            <button class="btn btn-ghost" style="width:100%; margin-bottom:10px" onclick="addRow('recipeArea')">+ 原料</button>
-            <button class="btn btn-primary" onclick="saveRecipe()">保存配方</button>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><h2>📜 发布任务</h2></div>
-            <input type="text" id="taskCategory" placeholder="分类">
-            <input type="text" id="taskTitle" placeholder="标题">
-            <div id="taskReqArea"></div>
-            <button class="btn btn-ghost" style="width:100%; margin-bottom:10px" onclick="addRow('taskReqArea')">+ 需求</button>
-            <button class="btn btn-primary" onclick="saveTask()">发布任务</button>
-        </div>
-    </aside>
-
-    <main style="grid-column: span 1; width: 100%;"> 
-        
+    <div class="layout-col" id="col-inventory">
         <div class="card">
             <div class="card-header">
-                <h2>📊 缺口补给清单</h2>
-                <div id="syncStatus" style="font-size:12px; color:var(--text-sub)">正在连接...</div>
+                <h2>📦 我的库存</h2>
+                <button class="btn btn-danger btn-ghost" style="padding:2px 6px; font-size:10px" onclick="clearUserData()">清空</button>
             </div>
-            <div id="summaryDisplay" style="display:grid; gap:8px"></div>
+            <div class="tabs" id="invFilters" style="margin-bottom:10px; justify-content:center"></div>
+            <div id="inventoryDisplay" class="inv-grid"></div>
         </div>
+    </div>
 
+    <div class="layout-col" id="col-tasks">
         <div class="card">
             <div class="card-header">
                 <h2>✅ 任务看板</h2>
@@ -150,31 +125,69 @@
                 <div id="doneArea" style="display:none; margin-top:10px;"></div>
             </div>
         </div>
+    </div>
 
+    <div class="layout-col" id="col-console">
+        
         <div class="card">
             <div class="card-header">
-                <h2>📦 我的库存 (本地保存)</h2>
-                <div class="tabs" id="invFilters" style="margin-bottom:0"></div>
+                <h2>📊 缺口补给</h2>
+                <div id="syncStatus" style="font-size:11px; color:var(--text-sub)">正在连接...</div>
             </div>
-            <div id="inventoryDisplay" class="inv-grid"></div>
-            <div style="margin-top:15px; text-align:right">
-                 <button class="btn btn-danger btn-ghost" onclick="clearUserData()">🗑️ 清空我的进度</button>
+            <div id="summaryDisplay" style="display:grid; gap:8px"></div>
+        </div>
+
+        <div id="adminPanel">
+            <div class="card" style="border-color: var(--primary); background: #eff6ff;">
+                <div class="card-header"><h2 style="color:var(--primary)">👑 发布中心</h2></div>
+                <button class="btn btn-primary" onclick="exportJSON()">📤 导出 data.json</button>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h2>📂 数据管理</h2></div>
+                <div class="btn-group-v">
+                    <button class="btn btn-ghost" onclick="triggerImport('recipe')">📥 导入配方 (CSV)</button>
+                    <button class="btn btn-ghost" onclick="triggerImport('task')">📥 导入任务 (CSV)</button>
+                    <div style="border-top:1px solid #eee; margin:5px 0"></div>
+                    <button class="btn btn-danger" onclick="clearData('recipe')">🗑️ 清空配方</button>
+                    <button class="btn btn-danger" onclick="clearData('task')">🗑️ 清空任务</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h2>🛠️ 录入配方</h2></div>
+                <input type="text" id="itemName" placeholder="道具名称">
+                <select id="itemGrade">
+                    <option value="white">白色</option><option value="green">绿色</option>
+                    <option value="blue">蓝色</option><option value="purple">紫色</option>
+                    <option value="gold">金色</option><option value="rainbow">彩色</option>
+                </select>
+                <input type="text" id="itemSource" placeholder="来源">
+                <div id="recipeArea"></div>
+                <button class="btn btn-ghost" style="width:100%; margin-bottom:10px" onclick="addRow('recipeArea')">+ 原料</button>
+                <button class="btn btn-primary" onclick="saveRecipe()">保存配方</button>
+            </div>
+
+            <div class="card">
+                <div class="card-header"><h2>📜 发布任务</h2></div>
+                <input type="text" id="taskCategory" placeholder="分类">
+                <input type="text" id="taskTitle" placeholder="标题">
+                <div id="taskReqArea"></div>
+                <button class="btn btn-ghost" style="width:100%; margin-bottom:10px" onclick="addRow('taskReqArea')">+ 需求</button>
+                <button class="btn btn-primary" onclick="saveTask()">发布任务</button>
             </div>
         </div>
-    </main>
+    </div>
 </div>
 
 <script>
+    // V13 逻辑核心与 V12.2 保持一致
     let state = {
-        recipes: [], 
-        tasks: [],   
+        recipes: [], tasks: [],   
         inventory: JSON.parse(localStorage.getItem('user_inv')) || {},
         doneIds: JSON.parse(localStorage.getItem('user_done')) || [],
-        selectedIds: [],
-        recipeMap: new Map(),
-        activeCat: '全部',
-        filterGrade: 'all',
-        isAdmin: false
+        selectedIds: [], recipeMap: new Map(),
+        activeCat: '全部', filterGrade: 'all', isAdmin: false
     };
 
     let importType = 'recipe'; 
@@ -187,62 +200,44 @@
         if (params.get('admin') === 'true') {
             state.isAdmin = true;
             document.getElementById('adminPanel').style.display = 'block';
-            document.querySelector('.app-container').style.gridTemplateColumns = '360px 1fr';
             showToast('已进入管理员模式', 'warning');
-        } else {
-            document.querySelector('.app-container').style.display = 'block';
         }
 
-        // 2. 加载远程数据 (增加容错逻辑)
+        // 2. 加载远程数据
         try {
             const res = await fetch(`./data.json?v=${Date.now()}`);
-            if (res.status === 404) throw new Error("404 Not Found"); // 明确捕获 404
+            if (res.status === 404) throw new Error("404");
             if (!res.ok) throw new Error("Load failed");
             
             const data = await res.json();
             state.recipes = data.recipes || [];
             state.tasks = data.tasks || [];
             
-            statusEl.textContent = "✅ 数据同步成功";
+            statusEl.textContent = "✅ 已同步";
             statusEl.style.color = "var(--success)";
         } catch (e) {
             console.error(e);
             if(state.isAdmin) {
-                // 如果是管理员且文件不存在，初始化为空，允许他去录入
-                statusEl.textContent = "⚠️ 未找到配置文件，已初始化为空 (请录入数据后导出)";
-                state.recipes = [];
-                state.tasks = [];
+                statusEl.textContent = "⚠️ 新项目 (请录入后导出)";
+                state.recipes = []; state.tasks = [];
             } else {
-                statusEl.textContent = "❌ 无法连接服务器 (data.json 丢失或格式错误)";
+                statusEl.textContent = "❌ 连接失败";
             }
             statusEl.style.color = "var(--danger)";
         }
 
-        buildIndex();
-        renderAll();
+        buildIndex(); renderAll();
     }
 
-    function buildIndex() {
-        state.recipeMap.clear();
-        state.recipes.forEach(r => state.recipeMap.set(r.name, r));
-    }
-
-    function syncUser() {
-        localStorage.setItem('user_inv', JSON.stringify(state.inventory));
-        localStorage.setItem('user_done', JSON.stringify(state.doneIds));
-    }
+    function buildIndex() { state.recipeMap.clear(); state.recipes.forEach(r => state.recipeMap.set(r.name, r)); }
+    function syncUser() { localStorage.setItem('user_inv', JSON.stringify(state.inventory)); localStorage.setItem('user_done', JSON.stringify(state.doneIds)); }
 
     // --- 管理功能 ---
-    function triggerImport(type) { 
-        importType = type; 
-        document.getElementById('fileIn').value = ''; // 修复：必须清空，否则重复导入同一文件不触发onchange
-        document.getElementById('fileIn').click(); 
-    }
+    function triggerImport(type) { importType = type; document.getElementById('fileIn').value = ''; document.getElementById('fileIn').click(); }
 
     function clearData(type) {
-        if(confirm(`确定要清空内存中所有的 [${type==='recipe'?'配方':'任务'}] 吗？\n(这不会影响服务器上的文件，除非你重新导出)`)) {
-            if(type==='recipe') state.recipes = [];
-            else state.tasks = [];
+        if(confirm(`确定要清空内存中所有的 [${type==='recipe'?'配方':'任务'}] 吗？`)) {
+            if(type==='recipe') state.recipes = []; else state.tasks = [];
             buildIndex(); renderAll(); showToast('内存数据已清空', 'warning');
         }
     }
@@ -251,57 +246,39 @@
         if (!input.files || !input.files[0]) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            const content = e.target.result;
-            const lines = content.split(/\r\n|\n/).filter(l=>l.trim());
+            const lines = e.target.result.split(/\r\n|\n/).filter(l=>l.trim());
             let count = 0;
-            
-            // 简单防错：检查第一行
-            if (lines.length > 0 && !lines[0].includes(',')) {
-                return showToast('导入失败：CSV格式看起来不对 (乱码或非逗号分隔)', 'danger');
-            }
+            if (lines.length > 0 && !lines[0].includes(',')) return showToast('CSV格式错误', 'danger');
 
             lines.slice(1).forEach(l => {
-                // 去除 BOM 头
-                const cleanL = l.replace(/^\ufeff/, '');
-                const c = cleanL.split(',');
-                if(c.length < 2) return;
+                const cleanL = l.replace(/^\ufeff/, ''); const c = cleanL.split(','); if(c.length < 2) return;
                 
                 if(importType === 'recipe') {
                     const comps = [];
-                    // 兼容中文冒号
                     if(c[3]) c[3].replace('：',':').split(';').forEach(s => { 
-                        const parts = s.split(/[:：]/); 
-                        if(parts.length>=2) comps.push({item:parts[0].trim(), quantity:parseInt(parts[1])})
+                        const parts = s.split(/[:：]/); if(parts.length>=2) comps.push({item:parts[0].trim(), quantity:parseInt(parts[1])})
                     });
                     const newItem = {name:c[0].trim(), grade:c[1].trim(), source:c[2]?c[2].trim():'', components:comps};
-                    state.recipes = state.recipes.filter(r=>r.name!==newItem.name); 
-                    state.recipes.push(newItem);
+                    state.recipes = state.recipes.filter(r=>r.name!==newItem.name); state.recipes.push(newItem);
                 } else {
                     const needs = {};
                     if(c[2]) c[2].replace('：',':').split(';').forEach(s => { 
-                        const parts = s.split(/[:：]/); 
-                        if(parts.length>=2) needs[parts[0].trim()] = parseInt(parts[1]);
+                        const parts = s.split(/[:：]/); if(parts.length>=2) needs[parts[0].trim()] = parseInt(parts[1]);
                     });
-                    // 生成唯一ID，避免重复导入导致的问题很难排查
                     state.tasks.push({id:Date.now() + Math.random(), category:c[0].trim(), title:c[1].trim(), needs});
                 }
                 count++;
             });
-            buildIndex();
-            renderAll();
-            showToast(`成功读取 ${count} 条数据`);
+            buildIndex(); renderAll(); showToast(`导入 ${count} 条`);
         };
-        reader.readAsText(input.files[0], "UTF-8"); // 强制 UTF-8
+        reader.readAsText(input.files[0], "UTF-8");
     }
 
     function exportJSON() {
         const data = { recipes: state.recipes, tasks: state.tasks };
         const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "data.json";
-        a.click();
-        showToast('data.json 已生成，请上传覆盖 GitHub 文件');
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "data.json"; a.click();
+        showToast('data.json 已生成');
     }
 
     // --- 核心计算 ---
@@ -324,7 +301,6 @@
     }
 
     function calculate() {
-        // 勾选状态同步
         document.querySelectorAll('.t-cb').forEach(cb => {
             const id = parseFloat(cb.dataset.id);
             if(cb.checked && !state.selectedIds.includes(id)) state.selectedIds.push(id);
@@ -346,17 +322,13 @@
     // --- 渲染 ---
     function renderSummary(total, direct) {
         const el = document.getElementById('summaryDisplay');
-        if (!Object.keys(total).length) return el.innerHTML = `<div style="text-align:center;padding:20px;color:#94a3b8">请勾选任务开始计算...</div>`;
+        if (!Object.keys(total).length) return el.innerHTML = `<div style="text-align:center;padding:10px;color:#94a3b8;font-size:12px">请勾选任务...</div>`;
         el.innerHTML = Object.entries(total).map(([k, amt]) => {
             const lvl = amt > 50 ? 4 : amt > 20 ? 3 : amt > 5 ? 2 : 1;
             const r = state.recipeMap.get(k);
             return `<div class="lack-card lvl-${lvl}">
-                <div>
-                    <span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span> 
-                    <b>x${amt}</b>
-                    ${direct[k] ? `<span style="font-size:11px;color:#64748b;margin-left:5px">(直需:${direct[k]})</span>` : ''}
-                </div>
-                <button class="btn btn-ghost" style="padding:4px 8px; font-size:12px" onclick="quickAdd('${k}')">填入仓库</button>
+                <div><span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span> <b>x${amt}</b></div>
+                <button class="btn btn-ghost" style="padding:2px 6px; font-size:11px" onclick="quickAdd('${k}')">填入</button>
             </div>`;
         }).join('');
     }
@@ -378,33 +350,32 @@
                     <div style="font-weight:600">${t.title}</div>
                     <div style="font-size:12px; color:var(--text-sub)">${t.category||'未分类'} | ${needsHtml}</div>
                 </div>
-                ${state.isAdmin ? `<button class="btn btn-danger" style="padding:4px" onclick="deleteTask(${t.id})">删</button>` : ''}
+                ${state.isAdmin ? `<button class="btn btn-danger" style="padding:2px 4px;font-size:10px" onclick="deleteTask(${t.id})">删</button>` : ''}
             </div>`;
         };
 
-        document.getElementById('taskListBody').innerHTML = pending.length ? pending.map(t => getRow(t, false)).join('') : `<div style="text-align:center;color:#ccc;padding:20px">当前分类无待办任务</div>`;
+        document.getElementById('taskListBody').innerHTML = pending.length ? pending.map(t => getRow(t, false)).join('') : `<div style="text-align:center;color:#ccc;padding:20px">无待办任务</div>`;
         document.getElementById('doneArea').innerHTML = done.map(t => getRow(t, true)).join('');
         document.getElementById('doneCount').innerText = done.length;
         
-        // 全选状态逻辑修复
         const pendingIds = pending.map(t => t.id);
         const allSelected = pendingIds.length > 0 && pendingIds.every(id => state.selectedIds.includes(id));
         document.getElementById('selectAllBtn').checked = allSelected;
     }
 
     function renderInventory() {
-        const grades = ['all', 'white', 'green', 'blue', 'purple', 'gold', 'rainbow'];
+        const grades = ['all', 'white', 'green', 'blue', 'purple', 'gold'];
         document.getElementById('invFilters').innerHTML = grades.map(g => `<div class="tab-btn ${state.filterGrade===g?'active':''}" onclick="state.filterGrade='${g}';renderInventory()">${g=='all'?'全部':g}</div>`).join('');
         const items = Array.from(new Set([...state.recipeMap.keys(), ...Object.keys(state.inventory)])).sort();
         document.getElementById('inventoryDisplay').innerHTML = items.map(k => {
             const r = state.recipeMap.get(k);
             if(state.filterGrade !== 'all' && (r?.grade || 'white') !== state.filterGrade) return '';
             return `<div class="inv-card"><span class="badge q-${r?.grade||'white'}" onclick="showDetail('${k}')">${k}</span>
-                <div style="margin-top:5px"><input class="inv-input" type="number" value="${state.inventory[k]||0}" onchange="modifyInv('${k}', this.value)"></div></div>`;
+                <input class="inv-input" type="number" value="${state.inventory[k]||0}" onchange="modifyInv('${k}', this.value)"></div>`;
         }).join('');
     }
 
-    // --- 交互操作 ---
+    // --- 交互 ---
     function modifyInv(k, v) { state.inventory[k] = Math.max(0, parseInt(v)); syncUser(); calculate(); }
     function quickAdd(k) { state.inventory[k] = (state.inventory[k]||0)+1; syncUser(); renderInventory(); calculate(); showToast(`${k} +1`); }
     
@@ -417,24 +388,22 @@
     }
 
     function batchCompleteTasks() {
-        if(!state.selectedIds.length) return showToast('请先勾选任务', 'warning');
-        if(confirm(`确定完成 ${state.selectedIds.length} 个任务并从仓库扣除对应材料？`)) {
-            let count = 0;
+        if(!state.selectedIds.length) return showToast('未勾选任务', 'warning');
+        if(confirm(`完成 ${state.selectedIds.length} 个任务并扣料？`)) {
             state.selectedIds.forEach(id => {
                 const t = state.tasks.find(x=>x.id===id);
                 if(t && !state.doneIds.includes(id)) {
                     for(let n in t.needs) state.inventory[n] = Math.max(0, (state.inventory[n]||0)-t.needs[n]);
                     state.doneIds.push(id);
-                    count++;
                 }
             });
-            state.selectedIds=[]; syncUser(); renderAll(); showToast(`成功完成 ${count} 个任务`);
+            state.selectedIds=[]; syncUser(); renderAll(); showToast('批量完成成功');
         }
     }
 
     function toggleDone(id) {
         const t = state.tasks.find(x=>x.id===id);
-        if(confirm(`完成任务 [${t.title}] 并扣除材料？`)) {
+        if(confirm('完成任务并扣料？')) {
             for(let n in t.needs) state.inventory[n] = Math.max(0, (state.inventory[n]||0)-t.needs[n]);
             state.doneIds.push(id); state.selectedIds=state.selectedIds.filter(i=>i!==id);
             syncUser(); renderAll();
@@ -443,7 +412,7 @@
 
     function saveRecipe() {
         const name = document.getElementById('itemName').value.trim();
-        if(!name) return showToast('请输入名称', 'warning');
+        if(!name) return showToast('无名称', 'warning');
         const comps = Array.from(document.querySelectorAll('#recipeArea div')).map(r => ({item: r.querySelector('.i-n').value, quantity: parseInt(r.querySelector('.i-q').value)})).filter(c=>c.item&&c.quantity);
         state.recipes = state.recipes.filter(r=>r.name!==name);
         state.recipes.push({name, grade:document.getElementById('itemGrade').value, source:document.getElementById('itemSource').value, components:comps});
@@ -452,7 +421,7 @@
 
     function saveTask() {
         const title = document.getElementById('taskTitle').value.trim();
-        if(!title) return showToast('请输入标题', 'warning');
+        if(!title) return showToast('无标题', 'warning');
         const needs={}; document.querySelectorAll('#taskReqArea div').forEach(r=>{let n=r.querySelector('.i-n').value, q=parseInt(r.querySelector('.i-q').value); if(n&&q) needs[n]=q;});
         state.tasks.push({id:Date.now(), category:document.getElementById('taskCategory').value||'未分类', title, needs});
         renderAll(); showToast('任务已暂存');
@@ -472,7 +441,7 @@
         document.getElementById('modalBody').innerHTML=`<h3 class="q-${r?.grade||'white'}" style="text-align:center">${k}</h3><p style="text-align:center;color:#666">${r?.source||'来源未知'}</p><hr style="border:0;border-top:1px solid #eee"><p>${r?.components?.map(c=>`${c.item}x${c.quantity}`).join(', ')||'基础材料'}</p>`;
         document.getElementById('modal').style.display='flex';
     }
-    function clearUserData() { if(confirm('清空我的库存和完成记录？(无法恢复)')) { localStorage.clear(); location.reload(); } }
+    function clearUserData() { if(confirm('清空我的库存和记录？')) { localStorage.clear(); location.reload(); } }
     function renderAll() { renderTasks(); renderInventory(); calculate(); }
 
     init();
